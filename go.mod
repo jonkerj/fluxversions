@@ -3,9 +3,11 @@ module github.com/jonkerj/fluxversion
 go 1.15
 
 require (
-	golang.org/x/mod v0.4.2
 	github.com/fluxcd/helm-controller/api v0.8.0
 	github.com/fluxcd/source-controller/api v0.9.0
+	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
+	golang.org/x/mod v0.4.2
+	golang.org/x/tools v0.1.0 // indirect
 	helm.sh/helm/v3 v3.5.2
 	k8s.io/apimachinery v0.20.4
 	k8s.io/client-go v0.20.4

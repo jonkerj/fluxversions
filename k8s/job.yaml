@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
   labels:
     app.kubernetes.io/instance: fluxversions
@@ -8,12 +8,6 @@ metadata:
   name: fluxversions
   namespace: fluxversions
 spec:
-  replicas: 1
-  revisionHistoryLimit: 3
-  selector:
-    matchLabels:
-      app.kubernetes.io/instance: fluxversions
-      app.kubernetes.io/name: fluxversions
   template:
     metadata:
       labels:
@@ -22,12 +16,10 @@ spec:
     spec:
       containers:
       - name: fluxversions
-        image: jonkerj/versions:latest
-        imagePullPolicy: Always
+        image: jonkerj/fluxversions:v0.1.0
         resources:
           limits: {cpu: 0.25, memory: 256Mi}
           requests: {cpu: 0.25, memory: 32Mi}
-        ports:
-        - containerPort: 5000
-          name: http
       serviceAccountName: fluxversions
+      restartPolicy: Never
+  backoffLimit: 4

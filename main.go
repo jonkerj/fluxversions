@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"golang.org/x/mod/semver"
 
@@ -49,12 +48,10 @@ func NewReleaseInspector(kubeConfig *restclient.Config) (*ReleaseInspector, erro
 	return ri, nil
 }
 
-func (ri *ReleaseInspector) inspectRelease(release *helmv2.HelmRelease) (error){
-	fmt.Printf("Found release: %s/%s (chart %s %s)\n", release.Namespace, release.Name, release.Spec.Chart.Spec.Chart, release.Spec.Chart.Spec.Version)
+func (ri *ReleaseInspector) getIndex(release helmv2.HelmRelease) (*repo.IndexFile, error) {
 	sr := release.Spec.Chart.Spec.SourceRef
-
 	if sr.Kind != "HelmRepository" {
-		return errors.New("Release does not originate from HelmRepository")
+		return nil, nil
 	}
 	nameKey := types.NamespacedName{
 		Name: sr.Name,
@@ -62,44 +59,59 @@ func (ri *ReleaseInspector) inspectRelease(release *helmv2.HelmRelease) (error){
 	}
 	var hr sourcev1.HelmRepository
 	if err := ri.kubeClient.Get(context.Background(), nameKey, &hr); err != nil {
-		return err
+		return nil, fmt.Errorf("Error fetching HelmRelease: %s", err.Error())
 	}
 
 	url := hr.GetArtifact().URL
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Error fetching artifact: %s", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return errors.New("Received a non 200 response code")
+		return nil, errors.New("Received a non 200 response code")
 	}
 
 	tmpFile, err := ioutil.TempFile("/", "index.*.yaml")
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Error creating temp file: %s", err.Error())
 	}
 	defer os.Remove(tmpFile.Name())
 
 	_, err = io.Copy(tmpFile, resp.Body)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Error saving artifact to temp file: %s", err.Error())
 	}
 	err = tmpFile.Close()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Error closing temp file: %s", err.Error())
 	}
 
 	idx, err := repo.LoadIndexFile(tmpFile.Name())
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Error creating helm repo object: %s", err.Error())
 	}
+
+	return idx, nil
+}
+
+func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) (error){
 	currentVer := release.Spec.Chart.Spec.Version
 	if ! strings.HasPrefix(currentVer, "v") {
 		currentVer = "v" + currentVer
 	}
+
+	idx, err := ri.getIndex(release)
+	if err != nil {
+		return fmt.Errorf("Error loading helm index: %s", err.Error())
+	}
+	if idx == nil {
+		return nil
+	}
+
+	newest := ""
 	for _, entries := range idx.Entries {
 		for _, entry := range entries {
 			if entry.Name == release.Spec.Chart.Spec.Chart {
@@ -108,23 +120,26 @@ func (ri *ReleaseInspector) inspectRelease(release *helmv2.HelmRelease) (error){
 					repoVer = "v" + repoVer
 				}
 
-				if semver.Compare(currentVer, repoVer) < 0 {
-					fmt.Printf("found newer: %s\n", repoVer)
+				if semver.Compare(currentVer, repoVer) < 0 && (newest == "" || semver.Compare(newest, repoVer) < 0) {
+					newest = repoVer
 				}
 			}
 		}
+	}
+	if newest != "" {
+		fmt.Printf("Release: %s/%s (chart %s) could be upgraded from %s to %s\n", release.Namespace, release.Name, release.Spec.Chart.Spec.Chart, currentVer, newest)
 	}
 
 	return nil
 }
 
-func (ri *ReleaseInspector) releases() <-chan *helmv2.HelmRelease {
-	ch := make(chan *helmv2.HelmRelease);
+func (ri *ReleaseInspector) Releases() <-chan helmv2.HelmRelease {
+	ch := make(chan helmv2.HelmRelease);
 	go func () {
 		var list helmv2.HelmReleaseList
 		if err := ri.kubeClient.List(context.Background(), &list); err == nil {
 			for _, release := range list.Items {
-				ch <- &release
+				ch <- release
 			}
 		} // TODO: log errors!
 		close(ch)
@@ -132,24 +147,36 @@ func (ri *ReleaseInspector) releases() <-chan *helmv2.HelmRelease {
 	return ch
 }
 
-func main() {
+func getKubeConfig() (*restclient.Config, error) {
 	var kubeconfigPath *string
 
-	// ok, let's find out if there is a kubeconfig file. Default to "", which causes BuildConfigFromFlags to use in-cluster config
 	defaultKubeconfigPath := ""
 	if home := homedir.HomeDir(); home != "" {
 		defaultKubeconfigPath = filepath.Join(home, ".kube", "config")
-		if _, err := os.Stat(defaultKubeconfigPath); err != nil {
-			if os.IsNotExist(err) {
-				defaultKubeconfigPath = ""
-			}
-		}
 	}
-
 	kubeconfigPath = flag.String("kubeconfig", defaultKubeconfigPath, "(optional) absolute path to the kubeconfig file")
 	flag.Parse()
 
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfigPath)
+	// test if kubeconfig actually exists
+	if _, err := os.Stat(*kubeconfigPath); err != nil {
+		if os.IsNotExist(err) {
+			// it does not exist. Attempt to load in-cluster credentials
+			kubeconfig, err := restclient.InClusterConfig()
+			if err != nil {
+				return nil, fmt.Errorf("Error creating in-cluster config: %s", err.Error())
+			}
+			return kubeconfig, nil
+		}
+	}
+	kubeconfig, err := clientcmd.BuildConfigFromFlags("", *kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating config from kubeconfig file: %s", err.Error())
+	}
+	return kubeconfig, nil
+}
+
+func main() {
+	config, err := getKubeConfig()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -158,14 +185,10 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-
-	for {
-		for release := range ri.releases() {
-			err := ri.inspectRelease(release)
-			if err != nil {
-				fmt.Printf("Error: %s\n", err.Error())
-			}
+	for release := range ri.Releases() {
+		err := ri.Inspect(release)
+		if err != nil {
+			fmt.Printf("Error: %s\n", err.Error())
 		}
-		time.Sleep(time.Second * 10)
 	}
 }

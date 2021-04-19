@@ -1,7 +1,7 @@
 FROM golang:1.15 as builder
 RUN mkdir /workdir
 WORKDIR /workdir
-COPY go.mod deps .
+COPY go.mod deps ./
 
 RUN go mod download
 RUN CGO_ENABLED=0 go build $(cat deps)
