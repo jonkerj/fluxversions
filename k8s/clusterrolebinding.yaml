@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluxversions
+subjects:
+- kind: ServiceAccount
+  name: fluxversions
+  namespace: fluxversions
+roleRef:
+  kind: ClusterRole
+  name: fluxversions
+  apiGroup: rbac.authorization.k8s.io
