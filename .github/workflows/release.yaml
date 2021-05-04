@@ -1,0 +1,17 @@
+name: Release
+on:
+  push:
+    branches:
+    - main
+jobs:
+  release:
+    name: "Release"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Bump version and tag
+      id: tag_version
+      uses: mathieudutour/github-tag-action@v5.5
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
