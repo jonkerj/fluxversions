@@ -18,16 +18,14 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
-
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 func New(kubeConfig *restclient.Config) (*ReleaseInspector, error) {
 	scheme := apiruntime.NewScheme()
 	_ = sourcev1.AddToScheme(scheme)
 	_ = helmv2.AddToScheme(scheme)
-
 
 	kc, err := client.New(kubeConfig, client.Options{
 		Scheme: scheme,
@@ -46,7 +44,7 @@ func (ri *ReleaseInspector) getIndex(release helmv2.HelmRelease) (*repo.IndexFil
 		return nil, nil
 	}
 	nameKey := types.NamespacedName{
-		Name: sr.Name,
+		Name:      sr.Name,
 		Namespace: sr.Namespace,
 	}
 	var hr sourcev1.HelmRepository
@@ -89,9 +87,9 @@ func (ri *ReleaseInspector) getIndex(release helmv2.HelmRelease) (*repo.IndexFil
 	return idx, nil
 }
 
-func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) (error){
+func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) error {
 	currentVer := release.Spec.Chart.Spec.Version
-	if ! strings.HasPrefix(currentVer, "v") {
+	if !strings.HasPrefix(currentVer, "v") {
 		currentVer = "v" + currentVer
 	}
 
@@ -108,8 +106,11 @@ func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) (error){
 		for _, entry := range entries {
 			if entry.Name == release.Spec.Chart.Spec.Chart {
 				repoVer := entry.Version
-				if ! strings.HasPrefix(repoVer, "v") {
+				if !strings.HasPrefix(repoVer, "v") {
 					repoVer = "v" + repoVer
+				}
+				if strings.Contains(semver.Prerelease(repoVer), "alpha") {
+					continue
 				}
 
 				if semver.Compare(currentVer, repoVer) < 0 && (newest == "" || semver.Compare(newest, repoVer) < 0) {
@@ -126,8 +127,8 @@ func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) (error){
 }
 
 func (ri *ReleaseInspector) Releases() <-chan helmv2.HelmRelease {
-	ch := make(chan helmv2.HelmRelease);
-	go func () {
+	ch := make(chan helmv2.HelmRelease)
+	go func() {
 		var list helmv2.HelmReleaseList
 		if err := ri.kubeClient.List(context.Background(), &list); err == nil {
 			for _, release := range list.Items {
@@ -135,6 +136,6 @@ func (ri *ReleaseInspector) Releases() <-chan helmv2.HelmRelease {
 			}
 		} // TODO: log errors!
 		close(ch)
-	} ();
+	}()
 	return ch
 }
