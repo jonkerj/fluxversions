@@ -109,7 +109,13 @@ func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) error {
 				if !strings.HasPrefix(repoVer, "v") {
 					repoVer = "v" + repoVer
 				}
+				if strings.Contains(semver.Prerelease(repoVer), "rc") {
+					continue
+				}
 				if strings.Contains(semver.Prerelease(repoVer), "alpha") {
+					continue
+				}
+				if strings.Contains(semver.Prerelease(repoVer), "beta") {
 					continue
 				}
 
