@@ -22,6 +22,8 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
+var ignorePrerelease = []string{"rc", "alpha", "beta", "snapshot"}
+
 func New(kubeConfig *restclient.Config) (*ReleaseInspector, error) {
 	scheme := apiruntime.NewScheme()
 	_ = sourcev1.AddToScheme(scheme)
@@ -103,20 +105,17 @@ func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) error {
 
 	newest := ""
 	for _, entries := range idx.Entries {
+	ENTRIES:
 		for _, entry := range entries {
 			if entry.Name == release.Spec.Chart.Spec.Chart {
 				repoVer := entry.Version
 				if !strings.HasPrefix(repoVer, "v") {
 					repoVer = "v" + repoVer
 				}
-				if strings.Contains(semver.Prerelease(repoVer), "rc") {
-					continue
-				}
-				if strings.Contains(semver.Prerelease(repoVer), "alpha") {
-					continue
-				}
-				if strings.Contains(semver.Prerelease(repoVer), "beta") {
-					continue
+				for _, keyword := range ignorePrerelease {
+					if strings.Contains(semver.Prerelease(repoVer), keyword) {
+						continue ENTRIES
+					}
 				}
 
 				if semver.Compare(currentVer, repoVer) < 0 && (newest == "" || semver.Compare(newest, repoVer) < 0) {
