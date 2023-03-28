@@ -1,6 +1,6 @@
 module github.com/jonkerj/fluxversions
 
-go 1.18
+go 1.19
 
 require (
 	github.com/fluxcd/helm-controller/api v0.31.2

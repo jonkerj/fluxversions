@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -66,7 +65,7 @@ func (ri *ReleaseInspector) getIndex(release helmv2.HelmRelease) (*repo.IndexFil
 		return nil, errors.New("Received a non 200 response code")
 	}
 
-	tmpFile, err := ioutil.TempFile("/", "index.*.yaml")
+	tmpFile, err := os.CreateTemp("/", "index.*.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("Error creating temp file: %s", err.Error())
 	}

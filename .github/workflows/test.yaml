@@ -10,7 +10,7 @@ jobs:
     - name: Setup Go
       uses: WillAbides/setup-go-faster@v1.8.0
       with:
-        go-version: '1.18'
+        go-version: '1.19'
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
@@ -61,7 +61,7 @@ jobs:
     - name: Setup Go
       uses: WillAbides/setup-go-faster@v1.8.0
       with:
-        go-version: '1.18'
+        go-version: '1.19'
     - name: Run go build
       run: |
         BINARY_NAME=fluxversions-${{matrix.goos}}-${{matrix.goarch}}
