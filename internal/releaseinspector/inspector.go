@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -21,6 +20,8 @@ import (
 	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
+
+var ignorePrerelease = []string{"rc", "alpha", "beta", "snapshot"}
 
 func New(kubeConfig *restclient.Config) (*ReleaseInspector, error) {
 	scheme := apiruntime.NewScheme()
@@ -64,7 +65,7 @@ func (ri *ReleaseInspector) getIndex(release helmv2.HelmRelease) (*repo.IndexFil
 		return nil, errors.New("Received a non 200 response code")
 	}
 
-	tmpFile, err := ioutil.TempFile("/", "index.*.yaml")
+	tmpFile, err := os.CreateTemp("/", "index.*.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("Error creating temp file: %s", err.Error())
 	}
@@ -103,20 +104,17 @@ func (ri *ReleaseInspector) Inspect(release helmv2.HelmRelease) error {
 
 	newest := ""
 	for _, entries := range idx.Entries {
+	ENTRIES:
 		for _, entry := range entries {
 			if entry.Name == release.Spec.Chart.Spec.Chart {
 				repoVer := entry.Version
 				if !strings.HasPrefix(repoVer, "v") {
 					repoVer = "v" + repoVer
 				}
-				if strings.Contains(semver.Prerelease(repoVer), "rc") {
-					continue
-				}
-				if strings.Contains(semver.Prerelease(repoVer), "alpha") {
-					continue
-				}
-				if strings.Contains(semver.Prerelease(repoVer), "beta") {
-					continue
+				for _, keyword := range ignorePrerelease {
+					if strings.Contains(semver.Prerelease(repoVer), keyword) {
+						continue ENTRIES
+					}
 				}
 
 				if semver.Compare(currentVer, repoVer) < 0 && (newest == "" || semver.Compare(newest, repoVer) < 0) {
