@@ -21,7 +21,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
-var ignorePrerelease = []string{"rc", "alpha", "beta", "snapshot"}
+var ignorePrerelease = []string{"rc", "alpha", "beta", "snapshot", "pre"}
 
 func New(kubeConfig *restclient.Config) (*ReleaseInspector, error) {
 	scheme := apiruntime.NewScheme()
